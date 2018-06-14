@@ -5,17 +5,18 @@ from osgeo import gdal
 from osgeo import ogr
 from osgeo import osr
 from math import sqrt, pow
+import sxg_python.myfun as myfun
 import pyproj
 
 class shp2geojson():
     # data_path = input('输入数据路径:')
-    data_path = 'E:\cateye\data\Contour'
+    data_path = myfun.input_2('输入数据路径：', 'F:/Cateye/data/静庄20180514/contour_shp')
     # datapath = data_path.replace('\\', '/')
     # data_name = input('输入数据名称：')
     # ex_num = input('输入抽稀比例（1、10、11）：')
     data_name = 'gujiao_100.shp'
     layer_input = input('输入层级:')
-    precision_select = {'8':[611.5, 3], '9':[305.7, 3], '10':[152.9, 4], '11':[76.4, 4], '12':[38.2, 4],
+    precision_select = {'8':[611.5, 4], '9':[305.7, 4], '10':[152.9, 5], '11':[76.4, 5], '12':[38.2, 5],
                         '13':[19.1, 5], '14':[9.6, 5], '15':[4.8, 5], '16':[2.4, 5], '17':[1.2, 6]}
     # threshold = float(threshold_input)
     qualify_list = list()
