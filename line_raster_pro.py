@@ -19,9 +19,10 @@ class line_raster_pro():
         gdal.SetConfigOption("SHAPE_ENCODING", "")
         ogr.RegisterAll()
         self.driver = ogr.GetDriverByName('ESRI Shapefile')
+        self.exnum = 1 #数据抽稀比例，按照点数抽取,1时不抽希，2时每隔1个点抽一个
 
         ##古交
-        self.path = 'F:/Cateye/data/contour_50-100-200'
+        self.path = 'E:/Cateye/data/contour_50-100-200'
         self.name = 'sectionline.shp'
         self.rastername = 'gujiaodem.tif'
         self.save_name = 'gujiao'
@@ -32,7 +33,7 @@ class line_raster_pro():
         # self.name = 'jinzhuang_pro.shp'
         # self.rastername = 'TIN_raster6.tif'
         # self.save_name = 'jinzhuang'
-        # self.epsg = 2423
+        # self.epsg = 2432
 
         # os.chdir(self.path)
         self.length = 50
@@ -62,7 +63,7 @@ class line_raster_pro():
             print('要素类型错误，请检查数据！')
             sys.exit()
         point_num = len(points)
-        print('点个数为%d'%point_num)
+        # print('点个数为%d'%point_num)
         output_points = []   #存储分割后的点坐标（投影后）
         contour_length = self.length   #间隔距离
         for i in range(point_num-1):
@@ -107,8 +108,11 @@ class line_raster_pro():
 
             # print('lastpoint:', output_points[len(output_points) - 1])
         output_points.append((points[len(points)-1][0],points[len(points)-1][1]))
-        print('allpoints_num=',len(output_points))
-        return(output_points)
+        output_points_ex = []
+        for i in range(0,len(output_points),self.exnum):
+            output_points_ex.append(output_points[i])
+        print('allpoints_num=',len(output_points_ex))
+        return(output_points_ex)
 
     def ReadRaster(self):
         points = self.ReadLineshp()
@@ -119,8 +123,8 @@ class line_raster_pro():
         in_transform = in_ds.GetGeoTransform()
         in_projection = in_ds.GetProjection()
         nodata = in_band.GetNoDataValue()
-        print(in_transform)
-        print(in_projection)
+        # print(in_transform)
+        # print(in_projection)
         print('nodata:', nodata)
         inv_transform = gdal.InvGeoTransform(in_transform)
         final_output = []
@@ -138,18 +142,29 @@ class line_raster_pro():
         # for i in range(20):
         #     print(final_output[i],type(final_output[i]))
         final_output_tr = myfun.cor_tr2(final_output,self.epsg,4326,0,1,2)
+        print(final_output_tr[0])
         myfun.savecsv(final_output_tr, 'wgs84'+self.save_name+'.csv', os.path.join(self.path,'output'))
         return(final_output_tr)
 
     def savejson(self):
         data = self.ReadRaster()
-        f = open(os.path.join(self.path,'output',self.save_name+str(self.length)+'间隔.json'), 'w')
+        selfname = self.save_name+str(self.length)+'_ex'+str(self.exnum)+'.json'
+        f = open(os.path.join(self.path,'output',selfname), 'w')
         f.write('[')
-        for val in data:
-            strval = str(val)
+        for i in range(0,len(data)-1):
+            strval = str(data[i])
+            # print('strval:',strval)
             f.write(strval)
             f.write(',')
+        lastval=str(data[len(data)-1])
+        f.write(lastval)
+        # f.write(',')
+        # for val in data:
+        #     strval = str(val)
+        #     f.write(strval)
+        #     f.write(',')
         f.write(']')
+        print(selfname+'保存成功！')
         f.close()
 
     def data_plot(self):
@@ -174,6 +189,7 @@ class line_raster_pro():
 def main():
     ex = line_raster_pro()
     ex.savejson()
-    ex.data_plot()
+    # ex.data_plot()
 
-main()
+if __name__=='__main__':
+	main()
