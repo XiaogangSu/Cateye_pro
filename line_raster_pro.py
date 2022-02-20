@@ -6,11 +6,10 @@ import sys
 import math
 import pandas as pd
 import numpy as np
-# import DeepMotion_pro.myfun as myfun
-import sxg_python.myfun as myfun
-import matplotlib.pyplot as plt
-plt.rcParams['font.sans-serif'] = ['SimHei']
-plt.rcParams['axes.unicode_minus']=False
+import copy
+from tkinter import filedialog as fd
+from tkinter import *
+import pdb
 
 class line_raster_pro():
     def __init__(self):
@@ -19,24 +18,56 @@ class line_raster_pro():
         gdal.SetConfigOption("SHAPE_ENCODING", "")
         ogr.RegisterAll()
         self.driver = ogr.GetDriverByName('ESRI Shapefile')
-        self.exnum = 1 #数据抽稀比例，按照点数抽取,1时不抽希，2时每隔1个点抽一个
+        
+        path_name = fd.askopenfilename(initialdir = "D:/Data/",title = "选择shp文件",filetypes = (("shp files","*.shp"),(" all files","*.*")))
+        raster_pathname = fd.askopenfilename(initialdir = "D:/Data/",title = "选择shp文件",filetypes = (("tif files","*.tif"),(" all files","*.*")))
+        (self.path, self.name) = os.path.split(path_name)
+        (self.rasterpath, self.rastername) = os.path.split(raster_pathname)
+        self.save_name = self.name[:-4]+'_'+self.rastername[:-4]+'_'
+        if os.path.exists(os.path.join(self.path,'output')):
+            pass
+        else:
+            os.mkdir(os.path.join(self.path,'output'))
 
-        ##古交
-        self.path = 'E:/Cateye/data/contour_50-100-200'
-        self.name = 'sectionline.shp'
-        self.rastername = 'gujiaodem.tif'
-        self.save_name = 'gujiao'
-        self.epsg = 32649
+        length = input('输入抽稀间隔(米)： ')
+        self.length = float(length)
+    
+    #同cor_tr，返回输入列表的所有列
+    def cor_tr2(self, data, epsg1, epsg2, lon_index, lat_index, alt_index):
+        gdal.SetConfigOption("GDAL_FILENAME_IS_UTF8", "NO")
+        gdal.SetConfigOption("SHAPE_ENCODING", "")
+        ogr.RegisterAll()
+        driver = ogr.GetDriverByName('ESRI Shapefile')
+        sr = osr.SpatialReference()
+        print('espg1:',epsg1,'  esgp2:',epsg2)
+        sr.ImportFromEPSG(epsg1)
+        sr_tar = osr.SpatialReference()
+        sr_tar.ImportFromEPSG(epsg2)
+        datacopy = copy.deepcopy(data)
+        data_tr = datacopy
+        i = -1
+        for val in datacopy:
+            i=i+1
+            temppoint = ogr.Geometry(ogr.wkbPoint)
+            temppoint.AssignSpatialReference(sr)
+            temppoint.AddPoint(val[lon_index], val[lat_index], val[alt_index])
+            # print('temppoint:',temppoint)
+            temppoint.TransformTo(sr_tar)
+            # print(temppoint.GetX(),temppoint.GetY(),temppoint.GetZ())
+            data_tr[i][lon_index] = temppoint.GetX()
+            data_tr[i][lat_index] = temppoint.GetY()
+            data_tr[i][alt_index] = temppoint.GetZ()
+            # print(data_tr[i])
+            # pdb.set_trace()
+            # data_tr.append([temppoint.GetX(),temppoint.GetY(), temppoint.GetZ()])
+        return(data_tr)
 
-        ##静庄
-        # self.path = 'E:/cateye/data/jingzhuang'
-        # self.name = 'jinzhuang_pro.shp'
-        # self.rastername = 'TIN_raster6.tif'
-        # self.save_name = 'jinzhuang'
-        # self.epsg = 2432
-
-        # os.chdir(self.path)
-        self.length = 50
+    def savecsv(self, savedata_list, savename, savepath):  #保存list到csv 参数：保存数据（list），保存文件名（str）,保存路径（str）
+        path = savepath
+        name = savename
+        savedata_df = pd.DataFrame(savedata_list)
+        savedata_df.to_csv(os.path.join(path, name), index=False, header=False, encoding='utf-8-sig')
+        print(savename + '保存成功！')
 
     def ReadLineshp(self):
         data_path = self.path
@@ -49,7 +80,7 @@ class line_raster_pro():
             print('打开文件%s成功！' % os.path.join(data_path, data_name))
         lyr = ds.GetLayer(0)
         spatialref = lyr.GetSpatialRef()
-        # epsg = 2432
+        self.epsg = int(spatialref.GetAttrValue('AUTHORITY', 1))
         feanum = lyr.GetFeatureCount()
         if feanum != 1:
             print('数据个数不为1，请检查数据"%s"' %data_name)
@@ -63,7 +94,7 @@ class line_raster_pro():
             print('要素类型错误，请检查数据！')
             sys.exit()
         point_num = len(points)
-        # print('点个数为%d'%point_num)
+        print('点个数为%d'%point_num)
         output_points = []   #存储分割后的点坐标（投影后）
         contour_length = self.length   #间隔距离
         for i in range(point_num-1):
@@ -108,23 +139,20 @@ class line_raster_pro():
 
             # print('lastpoint:', output_points[len(output_points) - 1])
         output_points.append((points[len(points)-1][0],points[len(points)-1][1]))
-        output_points_ex = []
-        for i in range(0,len(output_points),self.exnum):
-            output_points_ex.append(output_points[i])
-        print('allpoints_num=',len(output_points_ex))
-        return(output_points_ex)
+        print('allpoints_num=',len(output_points))
+        return(output_points)
 
     def ReadRaster(self):
         points = self.ReadLineshp()
         # for i in range(100):
         #     print(points[i])
-        in_ds = gdal.Open(os.path.join(self.path, self.rastername))
+        in_ds = gdal.Open(os.path.join(self.rasterpath, self.rastername))
         in_band = in_ds.GetRasterBand(1)
         in_transform = in_ds.GetGeoTransform()
         in_projection = in_ds.GetProjection()
         nodata = in_band.GetNoDataValue()
-        # print(in_transform)
-        # print(in_projection)
+        print(in_transform)
+        print(in_projection)
         print('nodata:', nodata)
         inv_transform = gdal.InvGeoTransform(in_transform)
         final_output = []
@@ -139,57 +167,36 @@ class line_raster_pro():
                 continue
             else:
                 final_output.append([points[i][0],points[i][1],float(value)])
+                # print('point:',points[i][0],points[i][1],float(value))
         # for i in range(20):
         #     print(final_output[i],type(final_output[i]))
-        final_output_tr = myfun.cor_tr2(final_output,self.epsg,4326,0,1,2)
-        print(final_output_tr[0])
-        myfun.savecsv(final_output_tr, 'wgs84'+self.save_name+'.csv', os.path.join(self.path,'output'))
+        print('self.epsg:', self.epsg)
+        final_output_tr = self.cor_tr2(final_output,self.epsg,4326,1,0,2)
+        # print(final_output[0])
+        # print(final_output_tr[0])
+        self.savecsv(final_output_tr, 'wgs84_'+self.save_name+'.csv', os.path.join(self.path,'output'))
         return(final_output_tr)
 
     def savejson(self):
         data = self.ReadRaster()
-        selfname = self.save_name+str(self.length)+'_ex'+str(self.exnum)+'.json'
-        f = open(os.path.join(self.path,'output',selfname), 'w')
+        f = open(os.path.join(self.path,'output',self.save_name+str(self.length)+'间隔.geojson'), 'w')
         f.write('[')
-        for i in range(0,len(data)-1):
-            strval = str(data[i])
-            # print('strval:',strval)
-            f.write(strval)
-            f.write(',')
-        lastval=str(data[len(data)-1])
-        f.write(lastval)
-        # f.write(',')
         # for val in data:
         #     strval = str(val)
         #     f.write(strval)
         #     f.write(',')
+        
+        for i in range(len(data)):
+            strval = str(data[i])
+            f.write(strval)
+            if i == len(data)-1:
+                pass
+            else:
+                f.write(',')
         f.write(']')
-        print(selfname+'保存成功！')
         f.close()
 
-    def data_plot(self):
-        data = self.ReadRaster()
-        list_name = ['lon','lat','alt']
-        data_df = pd.DataFrame(data, columns=list_name)
-        print(data_df.describe())
-        fig_hei = plt.figure(figsize=(14, 5))
-        ax1 = fig_hei.add_subplot(1, 1, 1)
-        data_df['alt'].plot()
-        # data_df['Z_fans'].plot()
-        ax1.set_ylabel('高程/m')
-        ax1.legend(loc='best')
-        ax1.set_title('纵断面')
-        plt.subplots_adjust(bottom=0.10, top=.90, left=.06, right=.94)
-        plt.savefig(os.path.join(self.path, 'output', self.save_name+str(self.length)+'米间隔纵断面.png'))
-        plt.show()
 
-    def pro(self):
-        print('程序处理！')
-
-def main():
+if __name__ =='__main__':
     ex = line_raster_pro()
     ex.savejson()
-    # ex.data_plot()
-
-if __name__=='__main__':
-	main()
